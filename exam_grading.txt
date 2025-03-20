@@ -1,0 +1,174 @@
+//4. Write a TCP Client-Server program to handle online exam grading requests. The client 
+sends a student's name along with a list of obtained marks to the server. The server 
+processes the request by calculating the total marks, percentage, and grade based on 
+predefined grading criteria. The computed results, including the total marks, percentage, 
+and assigned grade, are then transmitted back to the client. Finally, the client displays the 
+received results.   
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+#define MAX_MARKS 5
+#define BUFFER_SIZE 1024
+
+
+char* calculate_grade(float percentage) {
+    if (percentage >= 90) return "A+";
+    if (percentage >= 80) return "A";
+    if (percentage >= 70) return "B";
+    if (percentage >= 60) return "C";
+    if (percentage >= 50) return "D";
+    return "F";
+}
+
+void handle_client(int client_socket) {
+    char buffer[BUFFER_SIZE];
+    char name[BUFFER_SIZE];
+    int marks[MAX_MARKS];
+    int total_marks = 0;
+    float percentage;
+    char grade[3];
+
+    
+    read(client_socket, name, BUFFER_SIZE);
+
+    
+    for (int i = 0; i < MAX_MARKS; i++) {
+        read(client_socket, &marks[i], sizeof(int));
+        total_marks += marks[i];
+    }
+
+    
+    percentage = (float)total_marks / MAX_MARKS;
+
+    
+    strcpy(grade, calculate_grade(percentage));
+
+    
+    snprintf(buffer, BUFFER_SIZE, "Name: %s\nTotal Marks: %d\nPercentage: %.2f\nGrade: %s",
+             name, total_marks, percentage, grade);
+
+    
+    write(client_socket, buffer, BUFFER_SIZE);
+
+    printf("Processed request for %s\n", name);
+}
+
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+
+    
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Bind failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    
+    if (listen(server_fd, 3) < 0) {
+        perror("Listen failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Server listening on port %d...\n", PORT);
+
+    while (1) {
+        
+        if ((new_socket = accept(server_fd, (struct sockaddr )&address, (socklen_t)&addrlen)) < 0) {
+            perror("Accept failed");
+            close(server_fd);
+            exit(EXIT_FAILURE);
+        }
+
+        
+        handle_client(new_socket);
+
+        
+        close(new_socket);
+    }
+
+    close(server_fd);
+    return 0;
+}
+
+//client
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+#define MAX_MARKS 5
+#define BUFFER_SIZE 1024
+
+int main() {
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+    char name[BUFFER_SIZE];
+    int marks[MAX_MARKS];
+    char buffer[BUFFER_SIZE];
+
+    
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("\n Socket creation error \n");
+        return -1;
+    }
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+
+    
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+        printf("\nInvalid address/ Address not supported \n");
+        return -1;
+    }
+
+    
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("\nConnection Failed \n");
+        return -1;
+    }
+
+    
+    printf("Enter student name: ");
+    scanf(" %[^\n]", name);
+
+    
+    printf("Enter marks for %d subjects: ", MAX_MARKS);
+    for (int i = 0; i < MAX_MARKS; i++) {
+        scanf("%d", &marks[i]);
+    }
+
+    
+    write(sock, name, BUFFER_SIZE);
+
+    
+    for (int i = 0; i < MAX_MARKS; i++) {
+        write(sock, &marks[i], sizeof(int));
+    }
+
+    
+    read(sock, buffer, BUFFER_SIZE);
+    printf("\nResult:\n%s\n", buffer);
+
+    close(sock);
+    return 0;
+}
