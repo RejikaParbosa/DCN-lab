@@ -1,0 +1,147 @@
+//Write a TCP Client-Server program to implement a calculator with operations: addition, 
+subtraction, multiplication, and division. The client sends a request to the server in the form 
+of a simple arithmetic equation and the server responds back with the answer to the 
+equation.
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+#define BUFFER_SIZE 1024
+
+float calculate(float num1, float num2, char op) {
+    switch (op) {
+        case '+': return num1 + num2;
+        case '-': return num1 - num2;
+        case '*': return num1 * num2;
+        case '/': return num1 / num2;
+        default: return 0; 
+    }
+}
+
+void handle_client(int client_socket) {
+    char buffer[BUFFER_SIZE];
+    float num1, num2, result;
+    char op;
+
+    
+    read(client_socket, buffer, BUFFER_SIZE);
+
+    
+    sscanf(buffer, "%f %c %f", &num1, &op, &num2);
+
+    
+    result = calculate(num1, num2, op);
+
+    
+    snprintf(buffer, BUFFER_SIZE, "%.2f", result);
+    write(client_socket, buffer, BUFFER_SIZE);
+
+    printf("Processed equation: %.2f %c %.2f = %.2f\n", num1, op, num2, result);
+}
+
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+
+   
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Bind failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    
+    if (listen(server_fd, 3) < 0) {
+        perror("Listen failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Server listening on port %d...\n", PORT);
+
+    while (1) {
+        
+        if ((new_socket = accept(server_fd, (struct sockaddr )&address, (socklen_t)&addrlen)) < 0) {
+            perror("Accept failed");
+            close(server_fd);
+            exit(EXIT_FAILURE);
+        }
+
+        
+        handle_client(new_socket);
+
+        
+        close(new_socket);
+    }
+
+    close(server_fd);
+    return 0;
+}
+
+//client
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+#define BUFFER_SIZE 1024
+
+int main() {
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+    char equation[BUFFER_SIZE];
+    char result[BUFFER_SIZE];
+
+    
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("\n Socket creation error \n");
+        return -1;
+    }
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+
+    
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+        printf("\nInvalid address/ Address not supported \n");
+        return -1;
+    }
+
+    
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("\nConnection Failed \n");
+        return -1;
+    }
+
+   
+    printf("Enter equation (e.g., 5 + 3): ");
+    fgets(equation, BUFFER_SIZE, stdin);
+    equation[strcspn(equation, "\n")] = 0; // Remove newline character
+
+    
+    write(sock, equation, BUFFER_SIZE);
+
+    
+    read(sock, result, BUFFER_SIZE);
+    printf("Result: %s\n", result);
+
+    close(sock);
+    return 0;
+}
