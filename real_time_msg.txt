@@ -1,0 +1,220 @@
+//Write a TCP Client-Server program to implement a real-time messaging system. The server 
+should handle multiple clients concurrently and enable direct messaging between clients. 
+Clients should be able to send private messages to a specific user using a designated format 
+or broadcast messages to all connected users. The server must ensure proper message 
+routing, manage multiple connections efficiently, and handle user disconnections to 
+maintain smooth communication within the system.
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/select.h>
+
+#define PORT 8080
+#define MAX_CLIENTS 10
+#define BUFFER_SIZE 1024
+
+typedef struct {
+    int socket;
+    char name[BUFFER_SIZE];
+} Client;
+
+Client clients[MAX_CLIENTS];
+int client_count = 0;
+
+void broadcast_message(char *message, int sender_socket) {
+    for (int i = 0; i < client_count; i++) {
+        if (clients[i].socket != sender_socket) {
+            send(clients[i].socket, message, strlen(message), 0);
+        }
+    }
+}
+
+void send_private_message(char *message, char *recipient, int sender_socket) {
+    for (int i = 0; i < client_count; i++) {
+        if (strcmp(clients[i].name, recipient) == 0) {
+            send(clients[i].socket, message, strlen(message), 0);
+            break;
+        }
+    }
+}
+
+void handle_client_message(int client_socket, char *buffer) {
+    char recipient[BUFFER_SIZE];
+    char message[BUFFER_SIZE];
+
+    
+    if (buffer[0] == '@') {
+        sscanf(buffer, "@%s %[^\n]", recipient, message);
+        sprintf(buffer, "[Private from %s]: %s", clients[client_socket].name, message);
+        send_private_message(buffer, recipient, client_socket);
+    } else {
+        
+        sprintf(buffer, "[Broadcast from %s]: %s", clients[client_socket].name, buffer);
+        broadcast_message(buffer, client_socket);
+    }
+}
+
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    fd_set read_fds;
+    char buffer[BUFFER_SIZE];
+
+    
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Bind failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    
+    if (listen(server_fd, 3) < 0) {
+        perror("Listen failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Server listening on port %d...\n", PORT);
+
+    while (1) {
+        
+        FD_ZERO(&read_fds);
+
+        
+        FD_SET(server_fd, &read_fds);
+        int max_sd = server_fd;
+
+        
+        for (int i = 0; i < client_count; i++) {
+            int sd = clients[i].socket;
+            if (sd > 0) FD_SET(sd, &read_fds);
+            if (sd > max_sd) max_sd = sd;
+        }
+
+        
+        int activity = select(max_sd + 1, &read_fds, NULL, NULL, NULL);
+        if (activity < 0) {
+            perror("Select error");
+        }
+
+        
+        if (FD_ISSET(server_fd, &read_fds)) {
+            if ((new_socket = accept(server_fd, (struct sockaddr )&address, (socklen_t)&addrlen)) < 0) {
+                perror("Accept failed");
+                continue;
+            }
+
+            
+            clients[client_count].socket = new_socket;
+            printf("New client connected. Socket: %d\n", new_socket);
+
+            
+            send(new_socket, "Enter your name: ", BUFFER_SIZE, 0);
+            recv(new_socket, clients[client_count].name, BUFFER_SIZE, 0);
+            clients[client_count].name[strcspn(clients[client_count].name, "\n")] = 0; 
+
+            printf("Client %d registered as %s\n", new_socket, clients[client_count].name);
+            client_count++;
+        }
+
+        
+        for (int i = 0; i < client_count; i++) {
+            int sd = clients[i].socket;
+            if (FD_ISSET(sd, &read_fds)) {
+                int valread = recv(sd, buffer, BUFFER_SIZE, 0);
+                if (valread == 0) {
+                    
+                    printf("Client %s disconnected.\n", clients[i].name);
+                    close(sd);
+                    clients[i].socket = 0;
+                } else {
+                    
+                    buffer[valread] = '\0';
+                    handle_client_message(sd, buffer);
+                }
+            }
+        }
+    }
+
+    close(server_fd);
+    return 0;
+}
+
+//client
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+#define BUFFER_SIZE 1024
+
+int main() {
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+    char buffer[BUFFER_SIZE];
+
+    
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("\n Socket creation error \n");
+        return -1;
+    }
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+
+    
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+        printf("\nInvalid address/ Address not supported \n");
+        return -1;
+    }
+
+    
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("\nConnection Failed \n");
+        return -1;
+    }
+
+    
+    printf("Enter your name: ");
+    fgets(buffer, BUFFER_SIZE, stdin);
+    buffer[strcspn(buffer, "\n")] = 0; 
+    send(sock, buffer, BUFFER_SIZE, 0);
+
+    printf("Connected to server. Start chatting!\n");
+
+    while (1) {
+        
+        printf("> ");
+        fgets(buffer, BUFFER_SIZE, stdin);
+        buffer[strcspn(buffer, "\n")] = 0; 
+        send(sock, buffer, BUFFER_SIZE, 0);
+
+        
+        int valread = recv(sock, buffer, BUFFER_SIZE, 0);
+        if (valread <= 0) {
+            printf("Server disconnected.\n");
+            break;
+        }
+        buffer[valread] = '\0';
+        printf("%s\n", buffer);
+    }
+
+    close(sock);
+    return 0;
+}
