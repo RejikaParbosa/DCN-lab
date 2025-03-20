@@ -1,0 +1,149 @@
+//2. Write a TCP Client-Server program to implement a basic currency converter. The client 
+sends a request containing an amount and a currency code (e.g., USD to INR). The server 
+processes the request and returns the converted amount based on predefined exchange rates. 
+The client then displays the received converted amount.
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+
+#define USD_TO_INR 75.0
+#define EUR_TO_INR 85.0
+#define GBP_TO_INR 100.0
+
+float convert_currency(float amount, const char *currency) {
+    if (strcmp(currency, "USD") == 0) {
+        return amount * USD_TO_INR;
+    } else if (strcmp(currency, "EUR") == 0) {
+        return amount * EUR_TO_INR;
+    } else if (strcmp(currency, "GBP") == 0) {
+        return amount * GBP_TO_INR;
+    } else {
+        return -1; 
+    }
+}
+
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+
+    
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Bind failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    
+    if (listen(server_fd, 3) < 0) {
+        perror("Listen failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Server listening on port %d...\n", PORT);
+
+    while (1) {
+        
+        if ((new_socket = accept(server_fd, (struct sockaddr )&address, (socklen_t)&addrlen)) < 0) {
+            perror("Accept failed");
+            close(server_fd);
+            exit(EXIT_FAILURE);
+        }
+
+        
+        float amount;
+        char currency[4]; 
+        read(new_socket, &amount, sizeof(float));
+        read(new_socket, currency, sizeof(currency));
+
+        
+        float converted_amount = convert_currency(amount, currency);
+
+        
+        write(new_socket, &converted_amount, sizeof(float));
+
+        printf("Converted %.2f %s to %.2f INR\n", amount, currency, converted_amount);
+
+        
+        close(new_socket);
+    }
+
+    close(server_fd);
+    return 0;
+}
+
+//client
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+
+int main() {
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+
+    
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("\n Socket creation error \n");
+        return -1;
+    }
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+
+    
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+        printf("\nInvalid address/ Address not supported \n");
+        return -1;
+    }
+
+    
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("\nConnection Failed \n");
+        return -1;
+    }
+
+    
+    float amount;
+    char currency[4];
+    printf("Enter amount: ");
+    scanf("%f", &amount);
+    printf("Enter currency code (e.g., USD, EUR, GBP): ");
+    scanf("%s", currency);
+
+    
+    write(sock, &amount, sizeof(float));
+    write(sock, currency, sizeof(currency));
+
+    
+    float converted_amount;
+    read(sock, &converted_amount, sizeof(float));
+
+    if (converted_amount == -1) {
+        printf("Invalid currency code!\n");
+    } else {
+        printf("Converted amount: %.2f INR\n", converted_amount);
+    }
+
+    close(sock);
+    return 0;
+}
