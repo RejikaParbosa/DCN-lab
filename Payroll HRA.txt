@@ -1,0 +1,136 @@
+//Write a TCP Client-Server program wherein the server operates a payroll system and handles requests 
+from clients to compute the net salary of an employee. Clients transmit employee details, encompassing 
+basic salary, house rent allowance (HRA), dearness allowance (DA), provident fund (PF), and medical allowance. 
+The server computes the net salary utilizing the formula net_salary = basic + HRA + DA - PF - medical_allowance. 
+Subsequently, the server transmits the calculated net salary back to the client.
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+
+    
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+   
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Bind failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    
+    if (listen(server_fd, 3) < 0) {
+        perror("Listen failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Server listening on port %d...\n", PORT);
+
+    while (1) {
+        
+        if ((new_socket = accept(server_fd, (struct sockaddr )&address, (socklen_t)&addrlen)) < 0) {
+            perror("Accept failed");
+            close(server_fd);
+            exit(EXIT_FAILURE);
+        }
+
+        
+        float basic, hra, da, pf, medical;
+        read(new_socket, &basic, sizeof(float));
+        read(new_socket, &hra, sizeof(float));
+        read(new_socket, &da, sizeof(float));
+        read(new_socket, &pf, sizeof(float));
+        read(new_socket, &medical, sizeof(float));
+
+        float net_salary = basic + hra + da - pf - medical;
+
+        
+        write(new_socket, &net_salary, sizeof(float));
+
+        printf("Net Salary calculated and sent to client: %.2f\n", net_salary);
+
+        
+        close(new_socket);
+    }
+
+    close(server_fd);
+    return 0;
+}
+
+// client
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+
+int main() {
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+
+    
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("\n Socket creation error \n");
+        return -1;
+    }
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+
+    
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+        printf("\nInvalid address/ Address not supported \n");
+        return -1;
+    }
+
+    
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("\nConnection Failed \n");
+        return -1;
+    }
+
+    
+    float basic, hra, da, pf, medical;
+    printf("Enter Basic Salary: ");
+    scanf("%f", &basic);
+    printf("Enter HRA: ");
+    scanf("%f", &hra);
+    printf("Enter DA: ");
+    scanf("%f", &da);
+    printf("Enter PF: ");
+    scanf("%f", &pf);
+    printf("Enter Medical Allowance: ");
+    scanf("%f", &medical);
+
+    
+    write(sock, &basic, sizeof(float));
+    write(sock, &hra, sizeof(float));
+    write(sock, &da, sizeof(float));
+    write(sock, &pf, sizeof(float));
+    write(sock, &medical, sizeof(float));
+
+    
+    float net_salary;
+    read(sock, &net_salary, sizeof(float));
+    printf("Net Salary: %.2f\n", net_salary);
+
+    close(sock);
+    return 0;
+}
